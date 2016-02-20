@@ -2,6 +2,7 @@ package org.itheima19.sample;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.os.Handler;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
@@ -14,10 +15,13 @@ import java.util.List;
 
 public class MainActivity
         extends Activity
+        implements RefreshListView.OnRefreshListener
 {
     private RefreshListView mListView;
 
-    private List<String> mDatas;
+    private List<String>   mDatas;
+    private RefreshAdapter mAdapter;
+    private int count = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,10 +36,35 @@ public class MainActivity
             mDatas.add("数据-" + i);
         }
 
-        mListView.setAdapter(new RefreshAdapter());// -->list
+        mAdapter = new RefreshAdapter();
+        mListView.setAdapter(mAdapter);// -->list
+
+        //设置下拉刷新的监听
+        mListView.addOnRefreshListener(this);
     }
 
-    private class RefreshAdapter extends BaseAdapter {
+    @Override
+    public void onRefreshing() {
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+
+                mDatas = new ArrayList<>();
+                for (int i = 0; i < 20; i++) {
+                    mDatas.add(count + "次刷新后的数据-" + i);
+                }
+                mAdapter.notifyDataSetChanged();
+
+                count++;
+                //让RefreshlistView刷新状态改变
+                mListView.refreshFinish();
+            }
+        }, 2000);
+    }
+
+    private class RefreshAdapter
+            extends BaseAdapter
+    {
 
         @Override
         public int getCount() {
@@ -63,7 +92,7 @@ public class MainActivity
             ViewHolder holder = null;
 
             if (convertView == null) {
-                convertView = View.inflate(MainActivity.this,R.layout.item,null);
+                convertView = View.inflate(MainActivity.this, R.layout.item, null);
                 holder = new ViewHolder();
                 convertView.setTag(holder);
                 holder.tv = (TextView) convertView.findViewById(R.id.item_tv);

@@ -13,7 +13,14 @@ import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import com.nineoldandroids.animation.Animator;
 import com.nineoldandroids.animation.ValueAnimator;
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.ListIterator;
 
 /*
  *  @项目名：  RefreshListView 
@@ -42,8 +49,9 @@ public class RefreshListView
     private ImageView   mIvArrow;
     private ProgressBar mPbLoading;
 
-    private RotateAnimation mUp2DownAnim;
-    private RotateAnimation mDown2UpAnim;
+    private RotateAnimation         mUp2DownAnim;
+    private RotateAnimation         mDown2UpAnim;
+    private List<OnRefreshListener> mListeners;
 
     public RefreshListView(Context context) {
         this(context, null);
@@ -73,6 +81,9 @@ public class RefreshListView
                                            0.5f);
         mDown2UpAnim.setDuration(400);
         mDown2UpAnim.setFillAfter(true);
+
+        //初始化监听器集合
+        mListeners = new ArrayList<>();
     }
 
     private void initRfreshHeader() {
@@ -113,6 +124,10 @@ public class RefreshListView
 
                 float diffY = moveY - mDownY;
 
+                //如果当前是正在刷新
+                if (mCurrentState == STATE_REFRESHING) {
+                    break;
+                }
 
                 //当第0个可见时，用户是由上往下拉动时(diffY > 0)，需要刷新头可见
                 int firstVisiblePosition = this.getFirstVisiblePosition();
@@ -154,20 +169,19 @@ public class RefreshListView
                     //UI改变
                     refreshStateUI();
                     //刷新头得刚好完全显示
-                    //                    mRefreshHeader.setPadding(0, 0, 0, 0);//结果正确，过程不好
+                    // mRefreshHeader.setPadding(0, 0, 0, 0);//结果正确，过程不好
 
                     int start = mRefreshHeader.getPaddingTop();
                     int end = 0;
-                    doHeaderAnimation(start, end);
+                    doHeaderAnimation(start, end, true);
 
-
-                } else {
+                } else if (mCurrentState == STATE_PULL_DOWN) {
                     //如果是下拉刷新时松开的，
                     //完全隐藏刷新的头
                     // mRefreshHeader.setPadding(0, -mRefreshHeight, 0, 0);
                     int start = mRefreshHeader.getPaddingTop();
                     int end = -mRefreshHeight;
-                    doHeaderAnimation(start, end);
+                    doHeaderAnimation(start, end, false);
                 }
 
                 break;
@@ -177,7 +191,7 @@ public class RefreshListView
         return super.onTouchEvent(ev);
     }
 
-    private void doHeaderAnimation(int start, int end) {
+    private void doHeaderAnimation(int start, int end, final boolean needRefresh) {
         //模拟数据变化
         ValueAnimator animator = ValueAnimator.ofInt(start, end);
 
@@ -195,7 +209,52 @@ public class RefreshListView
             }
         });
 
+        animator.addListener(new Animator.AnimatorListener() {
+            @Override
+            public void onAnimationStart(Animator animation) {
+
+            }
+
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if (needRefresh) {
+                    //结束时通知刷新
+                    //触发了正在刷新...
+                    //使用者可能去网络加载数据，或是数据库....
+                    notifyOnRefreshing();
+                }
+            }
+
+            @Override
+            public void onAnimationCancel(Animator animation) {
+
+            }
+
+            @Override
+            public void onAnimationRepeat(Animator animation) {
+
+            }
+        });
+
         animator.start();
+    }
+
+    /**
+     * 刷新结束的方法
+     */
+    public void refreshFinish() {
+        //刷新状态改变
+        mCurrentState = STATE_PULL_DOWN;
+        refreshStateUI();
+        //刷新头回去,全部隐藏
+        doHeaderAnimation(mRefreshHeader.getPaddingTop(), -mRefreshHeight, false);
+        //设置刷新的时间
+        mTvDate.setText("时间:" +getTime(System.currentTimeMillis()));
+    }
+
+    private String getTime(long time) {
+        SimpleDateFormat sdf = new SimpleDateFormat("dd HH:mm:ss");
+        return sdf.format(new Date(time));
     }
 
     private void refreshStateUI() {
@@ -225,6 +284,34 @@ public class RefreshListView
 
                 break;
         }
+    }
 
+    public void addOnRefreshListener(OnRefreshListener listener) {
+        if (mListeners.contains(listener)) {
+            return;
+        }
+        mListeners.add(listener);
+    }
+
+    public void removeOnRefreshListener(OnRefreshListener listener) {
+        mListeners.remove(listener);
+    }
+
+    /**
+     * 通知正在刷新
+     */
+    private void notifyOnRefreshing() {
+        ListIterator<OnRefreshListener> iterator = mListeners.listIterator();
+        while (iterator.hasNext()) {
+            OnRefreshListener listener = iterator.next();
+            listener.onRefreshing();
+        }
+    }
+
+    public interface OnRefreshListener {
+        /**
+         * 正在刷新的回调
+         */
+        void onRefreshing();
     }
 }

@@ -3,9 +3,12 @@ package org.itheima19.sample;
 import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
+import android.support.v4.view.PagerAdapter;
+import android.support.v4.view.ViewPager;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import org.itheima19.library.RefreshListView;
@@ -18,6 +21,13 @@ public class MainActivity
         implements RefreshListView.OnRefreshListener
 {
     private RefreshListView mListView;
+    private ViewPager       mPager;
+
+    private int[] pics = new int[]{R.mipmap.pic_1,
+                                   R.mipmap.pic_2,
+                                   R.mipmap.pic_3,
+                                   R.mipmap.pic_4};
+
 
     private List<String>   mDatas;
     private RefreshAdapter mAdapter;
@@ -30,7 +40,18 @@ public class MainActivity
 
         mListView = (RefreshListView) findViewById(R.id.listview);
 
+        View header = View.inflate(this, R.layout.header, null);
+        mPager = (ViewPager) header.findViewById(R.id.viewpager);
 
+        //用listView去添加自定义的头
+        mListView.addHeaderView(header);
+
+
+        //给viewpager 的数据
+        mPager.setAdapter(new HeaderAdapter());
+
+
+        //listView的数据
         mDatas = new ArrayList<>();
         for (int i = 0; i < 20; i++) {
             mDatas.add("数据-" + i);
@@ -41,6 +62,8 @@ public class MainActivity
 
         //设置下拉刷新的监听
         mListView.addOnRefreshListener(this);
+
+
     }
 
     @Override
@@ -60,6 +83,38 @@ public class MainActivity
                 mListView.refreshFinish();
             }
         }, 2000);
+    }
+
+    private class HeaderAdapter
+            extends PagerAdapter
+    {
+
+        @Override
+        public int getCount() {
+            return pics.length;
+        }
+
+        @Override
+        public boolean isViewFromObject(View view, Object object) {
+            return view == object;
+        }
+
+        @Override
+        public Object instantiateItem(ViewGroup container, int position) {
+            ImageView iv = new ImageView(MainActivity.this);
+
+            iv.setImageResource(pics[position]);
+            iv.setScaleType(ImageView.ScaleType.FIT_XY);
+
+            container.addView(iv);
+
+            return iv;
+        }
+
+        @Override
+        public void destroyItem(ViewGroup container, int position, Object object) {
+            container.removeView((View) object);
+        }
     }
 
     private class RefreshAdapter

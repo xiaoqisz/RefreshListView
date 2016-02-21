@@ -37,9 +37,9 @@ public class RefreshListView
     private static final int    STATE_PULL_DOWN       = 0;
     private static final int    STATE_RELEASE_REFRESH = 1;
     private static final int    STATE_REFRESHING      = 2;
-    private float mDownY;
-    private int   mRefreshHeight;
-    private View  mRefreshHeader;
+
+    private int  mRefreshHeight;
+    private View mRefreshHeader;
 
     private int mCurrentState = STATE_PULL_DOWN;//记录刷新的状态
 
@@ -53,7 +53,8 @@ public class RefreshListView
     private RotateAnimation         mDown2UpAnim;
     private List<OnRefreshListener> mListeners;
 
-    private int mHiddenHeight = -1;//给一个默认值，在初始化时是view是不可能有的
+    private float mDownY        = -1;//给一个默认值，在初始化时是手指不可能触摸到的
+    private int   mHiddenHeight = -1;//给一个默认值，在初始化时是view是不可能有的
 
     public RefreshListView(Context context) {
         this(context, null);
@@ -112,17 +113,24 @@ public class RefreshListView
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
-
-
         switch (ev.getAction()) {
             case MotionEvent.ACTION_DOWN:
                 mDownY = ev.getY();
 
+                Log.d(TAG, "DOWN Y : " + mDownY);
                 break;
             case MotionEvent.ACTION_MOVE:
                 // 拖动时
 
                 float moveY = ev.getY();
+
+                if (mDownY == -1) {
+                    //没有走down
+                    //第一次move就等于down
+                    mDownY = moveY;
+                }
+
+//                Log.d(TAG, "MOVE Y : " + moveY);
 
                 float diffY = moveY - mDownY;
 
@@ -134,18 +142,23 @@ public class RefreshListView
                 //取到listView左上角的点
                 int[] lvLoc = new int[2];
                 this.getLocationOnScreen(lvLoc);
-//                Log.d(TAG, "lv Y : " + lvLoc[1]);
+
 
                 //取到第0个item左上角的点
                 int[] itemLoc = new int[2];
                 View itemView = this.getChildAt(0);
                 itemView.getLocationOnScreen(itemLoc);
+
+//                Log.d(TAG, "d-m Y : " + mDownY + "    " + moveY);
+//                Log.d(TAG, "lv Y : " + lvLoc[1]);
 //                Log.d(TAG, "item Y : " + itemLoc[1]);
 
                 //  需要的是第一次的隐藏高度
                 if (mHiddenHeight == -1) {
                     mHiddenHeight = lvLoc[1] - itemLoc[1];
                     //                    int hiddeHeight = lvLoc[1] - itemLoc[1];
+
+
                     Log.d(TAG, "height : " + mHiddenHeight);
                     Log.d(TAG, "-------------------------------");
                 }
@@ -176,13 +189,22 @@ public class RefreshListView
                         // 根据状态改变 UI
                         refreshStateUI();
                     }
-                    return true;
+
+                    if (mHiddenHeight == -1) {
+                        return true;
+                    } else {
+                        // 第一次是藏一半时
+                        break;
+                    }
                 }
                 break;
             case MotionEvent.ACTION_UP:
+                Log.d(TAG, "up");
             case MotionEvent.ACTION_CANCEL:
+                Log.d(TAG, "cancel");
                 //重置隐藏的值
                 mHiddenHeight = -1;
+                mDownY = -1;
 
                 // 松开时正在刷新
 

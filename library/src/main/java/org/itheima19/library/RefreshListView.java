@@ -8,6 +8,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.animation.Animation;
 import android.view.animation.RotateAnimation;
+import android.widget.AbsListView;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.ProgressBar;
@@ -32,6 +33,7 @@ import java.util.ListIterator;
  */
 public class RefreshListView
         extends ListView
+        implements AbsListView.OnScrollListener
 {
     private static final String TAG                   = "RefreshListView";
     private static final int    STATE_PULL_DOWN       = 0;
@@ -56,6 +58,10 @@ public class RefreshListView
     private float mDownY        = -1;//给一个默认值，在初始化时是手指不可能触摸到的
     private int   mHiddenHeight = -1;//给一个默认值，在初始化时是view是不可能有的
 
+    private boolean isLoadingMore;//用来标记是否是正在加载更多
+    private View    mFooterView;
+    private int     mFooterHeight;
+
     public RefreshListView(Context context) {
         this(context, null);
     }
@@ -65,6 +71,10 @@ public class RefreshListView
 
         //初始化刷新的头
         initRfreshHeader();
+
+        //初始化加载更多的底部
+        initLoadMoreFooter();
+
 
         mUp2DownAnim = new RotateAnimation(-180,
                                            0,
@@ -87,6 +97,21 @@ public class RefreshListView
 
         //初始化监听器集合
         mListeners = new ArrayList<>();
+    }
+
+    private void initLoadMoreFooter() {
+
+        //添加footer
+        mFooterView = View.inflate(getContext(), R.layout.refresh_footer, null);
+        this.addFooterView(mFooterView);
+
+
+        //计算footer高度
+        mFooterView.measure(0, 0);
+        mFooterHeight = mFooterView.getMeasuredHeight();
+
+        //设置listview滑动监听
+        this.setOnScrollListener(this);
     }
 
     private void initRfreshHeader() {
@@ -117,7 +142,7 @@ public class RefreshListView
             case MotionEvent.ACTION_DOWN:
                 mDownY = ev.getY();
 
-                Log.d(TAG, "DOWN Y : " + mDownY);
+                //                Log.d(TAG, "DOWN Y : " + mDownY);
                 break;
             case MotionEvent.ACTION_MOVE:
                 // 拖动时
@@ -130,7 +155,7 @@ public class RefreshListView
                     mDownY = moveY;
                 }
 
-//                Log.d(TAG, "MOVE Y : " + moveY);
+                //                Log.d(TAG, "MOVE Y : " + moveY);
 
                 float diffY = moveY - mDownY;
 
@@ -149,9 +174,9 @@ public class RefreshListView
                 View itemView = this.getChildAt(0);
                 itemView.getLocationOnScreen(itemLoc);
 
-//                Log.d(TAG, "d-m Y : " + mDownY + "    " + moveY);
-//                Log.d(TAG, "lv Y : " + lvLoc[1]);
-//                Log.d(TAG, "item Y : " + itemLoc[1]);
+                //                Log.d(TAG, "d-m Y : " + mDownY + "    " + moveY);
+                //                Log.d(TAG, "lv Y : " + lvLoc[1]);
+                //                Log.d(TAG, "item Y : " + itemLoc[1]);
 
                 //  需要的是第一次的隐藏高度
                 if (mHiddenHeight == -1) {
@@ -159,8 +184,8 @@ public class RefreshListView
                     //                    int hiddeHeight = lvLoc[1] - itemLoc[1];
 
 
-                    Log.d(TAG, "height : " + mHiddenHeight);
-                    Log.d(TAG, "-------------------------------");
+                    //                    Log.d(TAG, "height : " + mHiddenHeight);
+                    //                    Log.d(TAG, "-------------------------------");
                 }
 
                 //当第0个可见时，用户是由上往下拉动时(diffY > 0)，需要刷新头可见
@@ -199,9 +224,9 @@ public class RefreshListView
                 }
                 break;
             case MotionEvent.ACTION_UP:
-                Log.d(TAG, "up");
+                //                Log.d(TAG, "up");
             case MotionEvent.ACTION_CANCEL:
-                Log.d(TAG, "cancel");
+                //                Log.d(TAG, "cancel");
                 //重置隐藏的值
                 mHiddenHeight = -1;
                 mDownY = -1;
@@ -286,16 +311,33 @@ public class RefreshListView
     }
 
     /**
-     * 刷新结束的方法
+     * 刷新结束的方法和加载更多结束
      */
     public void refreshFinish() {
-        //刷新状态改变
-        mCurrentState = STATE_PULL_DOWN;
-        refreshStateUI();
-        //刷新头回去,全部隐藏
-        doHeaderAnimation(mRefreshHeader.getPaddingTop(), -mRefreshHeight, false);
-        //设置刷新的时间
-        mTvDate.setText("时间:" + getTime(System.currentTimeMillis()));
+        refreshFinish(true);
+    }
+
+    public void refreshFinish(boolean hasMore) {
+        if (isLoadingMore) {
+            //加载更多结束
+            isLoadingMore = false;
+
+            if (!hasMore) {
+                //没有更多，不应该看到footer,隐藏footer
+                mFooterView.setPadding(0, -mFooterHeight, 0, 0);
+            }
+        } else {
+            //刷新状态改变
+            mCurrentState = STATE_PULL_DOWN;
+            refreshStateUI();
+            //刷新头回去,全部隐藏
+            doHeaderAnimation(mRefreshHeader.getPaddingTop(), -mRefreshHeight, false);
+            //设置刷新的时间
+            mTvDate.setText("时间:" + getTime(System.currentTimeMillis()));
+
+            //显示加载更多的底部
+            mFooterView.setPadding(0, 0, 0, 0);
+        }
     }
 
     private String getTime(long time) {
@@ -354,10 +396,60 @@ public class RefreshListView
         }
     }
 
+    /**
+     * 通知正在加载更多
+     */
+    private void notifyOnLoadingMore() {
+        ListIterator<OnRefreshListener> iterator = mListeners.listIterator();
+        while (iterator.hasNext()) {
+            OnRefreshListener listener = iterator.next();
+            listener.onLoadingMore();
+        }
+    }
+
+    @Override
+    public void onScrollStateChanged(AbsListView view, int scrollState) {
+
+        if (mCurrentState == STATE_REFRESHING) {
+            //正在刷新中
+            return;
+        }
+
+        if (isLoadingMore) {
+            return;
+        }
+
+        //如果滑动到最后一个,去加载更多的数据
+        int position = this.getLastVisiblePosition();
+        int maxIndex = this.getAdapter()
+                           .getCount() - 1;
+        if (position == maxIndex && scrollState == OnScrollListener.SCROLL_STATE_IDLE) {
+            //滑动最后，加载更多
+            isLoadingMore = true;
+
+            Log.d(TAG, "加载更多中...");
+            notifyOnLoadingMore();
+        }
+    }
+
+    @Override
+    public void onScroll(AbsListView view,
+                         int firstVisibleItem,
+                         int visibleItemCount,
+                         int totalItemCount)
+    {
+
+    }
+
     public interface OnRefreshListener {
         /**
          * 正在刷新的回调
          */
         void onRefreshing();
+
+        /**
+         * 正在加载更多时候的回调
+         */
+        void onLoadingMore();
     }
 }

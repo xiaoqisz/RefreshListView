@@ -7,9 +7,11 @@ import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import org.itheima19.library.RefreshListView;
 
@@ -31,7 +33,8 @@ public class MainActivity
 
     private List<String>   mDatas;
     private RefreshAdapter mAdapter;
-    private int count = 0;
+    private int mRefreshCount  = 0;
+    private int mLoadMoreCount = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,6 +67,15 @@ public class MainActivity
         mListView.addOnRefreshListener(this);
 
 
+        //设置listView的点击事件
+        mListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                Toast.makeText(MainActivity.this, "点击了条目", Toast.LENGTH_SHORT)
+                     .show();
+            }
+        });
+
     }
 
     @Override
@@ -74,15 +86,50 @@ public class MainActivity
 
                 mDatas = new ArrayList<>();
                 for (int i = 0; i < 20; i++) {
-                    mDatas.add(count + "次刷新后的数据-" + i);
+                    mDatas.add(mRefreshCount + "次刷新后的数据-" + i);
                 }
                 mAdapter.notifyDataSetChanged();
 
-                count++;
+                mRefreshCount++;
                 //让RefreshlistView刷新状态改变
                 mListView.refreshFinish();
+
+
+                mLoadMoreCount = 0;
             }
         }, 2000);
+    }
+
+    @Override
+    public void onLoadingMore() {
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                //网络翻页的数据---》list
+                if (mLoadMoreCount >= 3) {
+                    Toast.makeText(MainActivity.this, "没有更多了", Toast.LENGTH_SHORT)
+                         .show();
+
+                    mListView.refreshFinish(false);
+                } else {
+                    List<String> list = new ArrayList<String>();
+                    for (int i = 0; i < 10; i++) {
+                        list.add("更多-" + (mDatas.size() + i));
+                    }
+
+                    mLoadMoreCount++;
+
+                    mDatas.addAll(list);
+                    //ui更新
+                    mAdapter.notifyDataSetChanged();
+
+                    //通知加载更多完成 ??为下一次加载更多做准备 TODO:
+                    mListView.refreshFinish();
+                }
+
+            }
+        }, 1500);
+
     }
 
     private class HeaderAdapter

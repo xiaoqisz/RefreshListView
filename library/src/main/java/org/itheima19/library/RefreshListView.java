@@ -53,6 +53,8 @@ public class RefreshListView
     private RotateAnimation         mDown2UpAnim;
     private List<OnRefreshListener> mListeners;
 
+    private int mHiddenHeight = -1;//给一个默认值，在初始化时是view是不可能有的
+
     public RefreshListView(Context context) {
         this(context, null);
     }
@@ -129,12 +131,31 @@ public class RefreshListView
                     break;
                 }
 
+                //取到listView左上角的点
+                int[] lvLoc = new int[2];
+                this.getLocationOnScreen(lvLoc);
+//                Log.d(TAG, "lv Y : " + lvLoc[1]);
+
+                //取到第0个item左上角的点
+                int[] itemLoc = new int[2];
+                View itemView = this.getChildAt(0);
+                itemView.getLocationOnScreen(itemLoc);
+//                Log.d(TAG, "item Y : " + itemLoc[1]);
+
+                //  需要的是第一次的隐藏高度
+                if (mHiddenHeight == -1) {
+                    mHiddenHeight = lvLoc[1] - itemLoc[1];
+                    //                    int hiddeHeight = lvLoc[1] - itemLoc[1];
+                    Log.d(TAG, "height : " + mHiddenHeight);
+                    Log.d(TAG, "-------------------------------");
+                }
+
                 //当第0个可见时，用户是由上往下拉动时(diffY > 0)，需要刷新头可见
                 int firstVisiblePosition = this.getFirstVisiblePosition();
                 if (diffY > 0 && firstVisiblePosition == 0) {
                     // 需要刷新头可见
-                    int top = (int) (diffY - mRefreshHeight + 0.5f);
-                    mRefreshHeader.setPadding(0, top, 0, 0);
+                    int top = (int) (diffY - mRefreshHeight + 0.5f - mHiddenHeight);
+                    mRefreshHeader.setPadding(0, top, 0, 0);//显示刷新头
 
                     //                    Log.d(TAG, "设置paddingTop的值 : " + top);
 
@@ -159,6 +180,9 @@ public class RefreshListView
                 }
                 break;
             case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                //重置隐藏的值
+                mHiddenHeight = -1;
 
                 // 松开时正在刷新
 
@@ -249,7 +273,7 @@ public class RefreshListView
         //刷新头回去,全部隐藏
         doHeaderAnimation(mRefreshHeader.getPaddingTop(), -mRefreshHeight, false);
         //设置刷新的时间
-        mTvDate.setText("时间:" +getTime(System.currentTimeMillis()));
+        mTvDate.setText("时间:" + getTime(System.currentTimeMillis()));
     }
 
     private String getTime(long time) {

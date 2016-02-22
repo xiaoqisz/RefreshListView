@@ -2,6 +2,9 @@ package org.itheima19.library;
 
 
 import android.content.Context;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -56,7 +59,6 @@ public class RefreshListView
     private List<OnRefreshListener> mListeners;
 
     private float mDownY             = -1;//给一个默认值，在初始化时是手指不可能触摸到的
-    private int   mHiddenHeight      = -1;//给一个默认值，在初始化时是view是不可能有的
     private int   DEFAULT_HEIGHT     = 0;
     private int   mFirstHiddenHeight = DEFAULT_HEIGHT;
 
@@ -65,6 +67,11 @@ public class RefreshListView
     private int     mFooterHeight;
 
     private View mFirstHeaderView;//用户第一个添加的自定义头(除刷新头外)
+
+    private OnItemClickListener mItemClickListener;
+    private boolean             mHasHidden;
+
+    private Drawable mItemSelector;
 
     public RefreshListView(Context context) {
         this(context, null);
@@ -172,6 +179,20 @@ public class RefreshListView
     }
 
     @Override
+    public void setOnItemClickListener(OnItemClickListener listener) {
+        super.setOnItemClickListener(listener);
+
+        this.mItemClickListener = listener;
+    }
+
+    @Override
+    public void setSelector(Drawable sel) {
+        super.setSelector(sel);
+
+        this.mItemSelector = sel;
+    }
+
+    @Override
     public boolean onTouchEvent(MotionEvent ev) {
         switch (ev.getAction()) {
             case MotionEvent.ACTION_DOWN:
@@ -215,8 +236,9 @@ public class RefreshListView
 
                 //  需要的是第一次的隐藏高度
                 if (mFirstHiddenHeight == DEFAULT_HEIGHT && hiddenDiff != 0) {
-                    mFirstHiddenHeight = hiddenDiff + itemView.getMeasuredHeight();
-                    Log.d(TAG, "hidden : " + mFirstHiddenHeight);
+                    mFirstHiddenHeight = hiddenDiff;
+
+                    mHasHidden = true;
                 }
 
                 //当第0个可见时，用户是由上往下拉动时(diffY > 0)，需要刷新头可见
@@ -226,9 +248,10 @@ public class RefreshListView
                     diffY = (int) (moveY - mDownY);
                 }
                 if (diffY >= 0 && firstVisiblePosition == 0 && hiddenDiff <= 0) {
+
                     mFirstHiddenHeight = DEFAULT_HEIGHT;
                     // 需要刷新头可见
-                    int top = diffY - mRefreshHeight ;
+                    int top = diffY - mRefreshHeight;
                     mRefreshHeader.setPadding(0, top, 0, 0);//显示刷新头
 
                     //当用户拉到到某个临界点时，显示为释放刷新
@@ -249,15 +272,20 @@ public class RefreshListView
                         refreshStateUI();
                     }
 
+                    if (!mHasHidden) {
+                        super.setOnItemClickListener(null);
+                        super.setSelector(new ColorDrawable(Color.TRANSPARENT));
+                    }
+
                     return true;
                 }
                 break;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
                 //重置隐藏的值
-                mHiddenHeight = -1;
                 mFirstHiddenHeight = DEFAULT_HEIGHT;
                 mDownY = -1;
+                mHasHidden = false;
 
                 // 松开时正在刷新
 
@@ -286,8 +314,12 @@ public class RefreshListView
                 break;
         }
 
+        boolean b = super.onTouchEvent(ev);
 
-        return super.onTouchEvent(ev);
+        super.setOnItemClickListener(mItemClickListener);
+        super.setSelector(mItemSelector);
+
+        return b;
     }
 
     private void doHeaderAnimation(int start, int end, final boolean needRefresh) {

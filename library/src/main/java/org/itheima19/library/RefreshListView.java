@@ -55,12 +55,16 @@ public class RefreshListView
     private RotateAnimation         mDown2UpAnim;
     private List<OnRefreshListener> mListeners;
 
-    private float mDownY        = -1;//给一个默认值，在初始化时是手指不可能触摸到的
-    private int   mHiddenHeight = -1;//给一个默认值，在初始化时是view是不可能有的
+    private float mDownY             = -1;//给一个默认值，在初始化时是手指不可能触摸到的
+    private int   mHiddenHeight      = -1;//给一个默认值，在初始化时是view是不可能有的
+    private int   DEFAULT_HEIGHT     = 0;
+    private int   mFirstHiddenHeight = DEFAULT_HEIGHT;
 
     private boolean isLoadingMore;//用来标记是否是正在加载更多
     private View    mFooterView;
     private int     mFooterHeight;
+
+    private View mFirstHeaderView;//用户第一个添加的自定义头(除刷新头外)
 
     public RefreshListView(Context context) {
         this(context, null);
@@ -137,6 +141,37 @@ public class RefreshListView
     }
 
     @Override
+    public void addHeaderView(View v) {
+        super.addHeaderView(v);
+
+        if (v != mRefreshHeader && mFirstHeaderView == null) {
+            mFirstHeaderView = v;
+        }
+    }
+
+    @Override
+    public boolean removeHeaderView(View v) {
+        if (v == mFirstHeaderView) {
+            mFirstHeaderView = null;
+        }
+        return super.removeHeaderView(v);
+    }
+
+    private View getFirstItemView() {
+        int firstVisiblePosition = getFirstVisiblePosition();
+        if (mFirstHeaderView != null && firstVisiblePosition == 1) {
+            return mFirstHeaderView;
+        }
+
+        int count = getChildCount();
+        if (count > 0 && firstVisiblePosition == 1) {
+            return getChildAt(0);
+        }
+
+        return null;
+    }
+
+    @Override
     public boolean onTouchEvent(MotionEvent ev) {
         switch (ev.getAction()) {
             case MotionEvent.ACTION_DOWN:
@@ -157,78 +192,71 @@ public class RefreshListView
 
                 //                Log.d(TAG, "MOVE Y : " + moveY);
 
-                float diffY = moveY - mDownY;
+                int diffY = (int) (moveY - mDownY);
 
                 //如果当前是正在刷新
                 if (mCurrentState == STATE_REFRESHING) {
                     break;
                 }
 
-                //取到listView左上角的点
-                int[] lvLoc = new int[2];
-                this.getLocationOnScreen(lvLoc);
-
-
                 //取到第0个item左上角的点
-                int[] itemLoc = new int[2];
-                View itemView = this.getChildAt(0);
-                itemView.getLocationOnScreen(itemLoc);
+                View itemView = getFirstItemView();
+                int hiddenDiff = 0;
+                if (itemView != null) {
+                    int[] itemLoc = new int[2];
+                    itemView.getLocationOnScreen(itemLoc);
 
-                //                Log.d(TAG, "d-m Y : " + mDownY + "    " + moveY);
-                //                Log.d(TAG, "lv Y : " + lvLoc[1]);
-                //                Log.d(TAG, "item Y : " + itemLoc[1]);
+                    //取到listView左上角的点
+                    int[] lvLoc = new int[2];
+                    this.getLocationOnScreen(lvLoc);
+
+                    hiddenDiff = lvLoc[1] - itemLoc[1];
+                }
 
                 //  需要的是第一次的隐藏高度
-                if (mHiddenHeight == -1) {
-                    mHiddenHeight = lvLoc[1] - itemLoc[1];
-                    //                    int hiddeHeight = lvLoc[1] - itemLoc[1];
-
-
-                    //                    Log.d(TAG, "height : " + mHiddenHeight);
-                    //                    Log.d(TAG, "-------------------------------");
+                if (mFirstHiddenHeight == DEFAULT_HEIGHT && hiddenDiff != 0) {
+                    mFirstHiddenHeight = hiddenDiff + itemView.getMeasuredHeight();
+                    Log.d(TAG, "hidden : " + mFirstHiddenHeight);
                 }
 
                 //当第0个可见时，用户是由上往下拉动时(diffY > 0)，需要刷新头可见
                 int firstVisiblePosition = this.getFirstVisiblePosition();
-                if (diffY > 0 && firstVisiblePosition == 0) {
+                if (firstVisiblePosition == 0 && mFirstHiddenHeight != DEFAULT_HEIGHT) {
+                    mDownY = moveY;
+                    diffY = (int) (moveY - mDownY);
+                }
+                if (diffY >= 0 && firstVisiblePosition == 0 && hiddenDiff <= 0) {
+                    mFirstHiddenHeight = DEFAULT_HEIGHT;
                     // 需要刷新头可见
-                    int top = (int) (diffY - mRefreshHeight + 0.5f - mHiddenHeight);
+                    int top = diffY - mRefreshHeight ;
                     mRefreshHeader.setPadding(0, top, 0, 0);//显示刷新头
-
-                    //                    Log.d(TAG, "设置paddingTop的值 : " + top);
 
                     //当用户拉到到某个临界点时，显示为释放刷新
                     if (top >= 0 && mCurrentState != STATE_RELEASE_REFRESH) {
                         //如果不是释放刷新的状态时才可以变为释放刷新
                         // 显示为释放刷新
-                        Log.d(TAG, "显示为释放刷新");
+                        //                        Log.d(TAG, "显示为释放刷新");
                         mCurrentState = STATE_RELEASE_REFRESH;
                         // 根据状态改变 UI
                         refreshStateUI();
 
                     } else if (top < 0 && mCurrentState != STATE_PULL_DOWN) {
                         //当用户没有超过某个临界点时，显示为下拉刷新
-                        Log.d(TAG, "显示为下拉刷新");
+                        //                        Log.d(TAG, "显示为下拉刷新");
                         mCurrentState = STATE_PULL_DOWN;
 
                         // 根据状态改变 UI
                         refreshStateUI();
                     }
 
-                    if (mHiddenHeight == -1) {
-                        return true;
-                    } else {
-                        // 第一次是藏一半时
-                        break;
-                    }
+                    return true;
                 }
                 break;
             case MotionEvent.ACTION_UP:
-                //                Log.d(TAG, "up");
             case MotionEvent.ACTION_CANCEL:
-                //                Log.d(TAG, "cancel");
                 //重置隐藏的值
                 mHiddenHeight = -1;
+                mFirstHiddenHeight = DEFAULT_HEIGHT;
                 mDownY = -1;
 
                 // 松开时正在刷新
